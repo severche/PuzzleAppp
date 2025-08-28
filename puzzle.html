@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sliding Puzzle Game with Image</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: #f9f9f9;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 {
+    margin-bottom: 20px;
+  }
+
+  /* Wrapper for puzzle + reference photo */
+  #game-area {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 30px;
+    width: 100%;
+    max-width: 900px;
+  }
+
+  #difficulty-select {
+    margin: 0 auto 20px auto;
+    display: flex;
+    flex-direction: column;   /* vertical buttons */
+    width: 200px;
+    gap: 15px;
+  }
+  .difficulty-btn {
+    padding: 12px 20px;
+    font-size: 1.1em;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    background-color: #2196F3;
+    color: white;
+    transition: background-color 0.3s;
+  }
+  .difficulty-btn:hover {
+    background-color: #1976d2;
+  }
+
+  #puzzle {
+    display: grid;
+    gap: 3px;
+    border: 4px solid #333;
+    background: #333;
+  }
+  .tile {
+    background-size: cover;
+    background-position: center;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 4px;
+  }
+  .empty {
+    background: #eee !important;
+    cursor: default;
+  }
+
+  #status {
+    margin-top: 20px;
+    font-size: 1.1em;
+    color: #333;
+  }
+  #message {
+    margin-top: 20px;
+    font-size: 1.2em;
+    color: #2e7d32;
+    font-weight: bold;
+  }
+  #controls {
+    margin-top: 25px;
+  }
+  button.control-btn {
+    padding: 10px 20px;
+    font-size: 1em;
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    background-color: #2196F3;
+    color: white;
+    margin: 0 8px;
+    transition: background-color 0.3s;
+  }
+  button.control-btn:hover {
+    background-color: #1976d2;
+  }
+
+  /* Reference image in the top-right */
+  #reference-img {
+    max-width: 250px;
+    border: 3px solid #333;
+    border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Sliding Puzzle Game</h1>
+
+<div id="difficulty-select">
+  <button class="difficulty-btn" onclick="selectLevel(3)">Easy (3x3)</button>
+  <button class="difficulty-btn" onclick="selectLevel(4)">Medium (4x4)</button>
+  <button class="difficulty-btn" onclick="selectLevel(5)">Hard (5x5)</button>
+</div>
+
+<!-- Puzzle + Reference side by side -->
+<div id="game-area" style="display:none;">
+  <div id="puzzle"></div>
+  <img id="reference-img" src="" alt="Reference Image" style="display:none;" />
+</div>
+
+<div id="status" style="display:none;">
+  Moves: <span id="move-count">0</span> |
+  Time: <span id="timer">0</span> sec
+</div>
+
+<div id="message"></div>
+
+<div id="controls" style="display:none;">
+  <button class="control-btn" onclick="resetPuzzle()">Reset</button>
+  <button class="control-btn" onclick="exitGame()">Exit</button>
+</div>
+
+<script>
+  const puzzle = document.getElementById('puzzle');
+  const message = document.getElementById('message');
+  const difficultySelect = document.getElementById('difficulty-select');
+  const controls = document.getElementById('controls');
+  const status = document.getElementById('status');
+  const moveCountSpan = document.getElementById('move-count');
+  const timerSpan = document.getElementById('timer');
+  const referenceImg = document.getElementById('reference-img');
+  const gameArea = document.getElementById('game-area');
+
+  let size = 3;
+  let tiles = [];
+  let emptyIndex = 0;
+  let moves = 0;
+  let timer = 0;
+  let timerInterval = null;
+  let gameActive = false;
+  let imgURL = "";
+
+  function selectLevel(newSize) {
+    size = newSize;
+    // 🔹 New random image each time
+    imgURL = "https://picsum.photos/400?random=" + new Date().getTime(); 
+    referenceImg.src = imgURL;
+
+    difficultySelect.style.display = 'none';
+    controls.style.display = 'block';
+    status.style.display = 'block';
+    referenceImg.style.display = 'block';
+    gameArea.style.display = 'flex';
+
+    initPuzzle();
+    shuffleTiles(); // auto shuffle when selecting
+    startTimer();
+  }
+
+  function initPuzzle() {
+    tiles = [];
+    puzzle.innerHTML = '';
+    moves = 0;
+    timer = 0;
+    gameActive = true;
+    message.textContent = '';
+    moveCountSpan.textContent = moves;
+    timerSpan.textContent = timer;
+    emptyIndex = size * size - 1;
+
+    puzzle.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+    puzzle.style.gridTemplateRows = `repeat(${size}, 1fr)`;
+    puzzle.style.width = `${size * 100}px`;
+    puzzle.style.height = puzzle.style.width;
+
+    for (let i = 0; i < size * size - 1; i++) {
+      tiles.push(i);
+    }
+    tiles.push(null);
+
+    render();
+  }
+
+  function render() {
+    puzzle.innerHTML = '';
+    const tileSize = puzzle.clientWidth / size;
+
+    tiles.forEach((num, idx) => {
+      const tile = document.createElement('div');
+      tile.classList.add('tile');
+      tile.style.width = tileSize + 'px';
+      tile.style.height = tileSize + 'px';
+
+      if (num === null) {
+        tile.classList.add('empty');
+      } else {
+        const row = Math.floor(num / size);
+        const col = num % size;
+        tile.style.backgroundImage = `url(${imgURL})`;
+        tile.style.backgroundSize = `${size * 100}% ${size * 100}%`;
+        tile.style.backgroundPosition = `${(col * 100) / (size - 1)}% ${(row * 100) / (size - 1)}%`;
+        tile.addEventListener('click', () => tileClick(idx));
+      }
+      puzzle.appendChild(tile);
+    });
+  }
+
+  function canMove(idx) {
+    const row = Math.floor(idx / size);
+    const col = idx % size;
+    const emptyRow = Math.floor(emptyIndex / size);
+    const emptyCol = emptyIndex % size;
+
+    return (
+      (row === emptyRow && Math.abs(col - emptyCol) === 1) ||
+      (col === emptyCol && Math.abs(row - emptyRow) === 1)
+    );
+  }
+
+  function tileClick(idx) {
+    if (!gameActive) return;
+    if (canMove(idx)) {
+      tiles[emptyIndex] = tiles[idx];
+      tiles[idx] = null;
+      emptyIndex = idx;
+      moves++;
+      moveCountSpan.textContent = moves;
+      render();
+      checkWin();
+    }
+  }
+
+  function checkWin() {
+    for (let i = 0; i < tiles.length - 1; i++) {
+      if (tiles[i] !== i) return;
+    }
+    gameActive = false;
+    clearInterval(timerInterval);
+    message.textContent = `🎉 Congrats! You solved it in ${moves} moves and ${timer} sec!`;
+  }
+
+  function shuffleTiles() {
+    if (!gameActive) return;
+    do {
+      for (let i = tiles.length - 2; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+      }
+      emptyIndex = tiles.indexOf(null);
+    } while (!isSolvable());
+    moves = 0;
+    timer = 0;
+    moveCountSpan.textContent = moves;
+    timerSpan.textContent = timer;
+    message.textContent = '';
+    render();
+  }
+
+  function countInversions(arr) {
+    let inv = 0;
+    let nums = arr.filter(n => n !== null);
+    for (let i = 0; i < nums.length - 1; i++) {
+      for (let j = i + 1; j < nums.length; j++) {
+        if (nums[i] > nums[j]) inv++;
+      }
+    }
+    return inv;
+  }
+
+  function isSolvable() {
+    const inv = countInversions(tiles);
+    if (size % 2 === 1) {
+      return inv % 2 === 0;
+    } else {
+      const emptyRowFromBottom = size - Math.floor(emptyIndex / size);
+      if (emptyRowFromBottom % 2 === 0) {
+        return inv % 2 === 1;
+      } else {
+        return inv % 2 === 0;
+      }
+    }
+  }
+
+  function resetPuzzle() {
+    initPuzzle();
+    shuffleTiles();
+    startTimer();
+  }
+
+  // Exit button functionality
+  function exitGame() {
+    difficultySelect.style.display = 'flex';
+    controls.style.display = 'none';
+    status.style.display = 'none';
+    referenceImg.style.display = 'none';
+    gameArea.style.display = 'none';
+    puzzle.innerHTML = '';
+    message.textContent = '';
+    tiles = [];
+    moves = 0;
+    clearInterval(timerInterval);
+    timer = 0;
+    moveCountSpan.textContent = 0;
+    timerSpan.textContent = 0;
+    gameActive = false;
+  }
+
+  function startTimer() {
+    clearInterval(timerInterval);
+    timer = 0;
+    timerSpan.textContent = timer;
+    timerInterval = setInterval(() => {
+      timer++;
+      timerSpan.textContent = timer;
+    }, 1000);
+  }
+</script>
+
+</body>
+</html>
